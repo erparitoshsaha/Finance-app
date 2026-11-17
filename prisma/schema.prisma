@@ -1,0 +1,201 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      String   @default("USER") // USER, ADMIN, ACCOUNTANT
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Client {
+  id          String    @id @default(uuid())
+  companyName String
+  gstin       String?
+  pan         String?
+  email       String
+  phone       String?
+  address     String?
+  state       String    // e.g. "Delhi", "Maharashtra" (Used to determine CGST+SGST vs IGST)
+  city        String?
+  zip         String?
+  invoices    Invoice[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique
+  invoiceType   String        @default("TAX INVOICE") // SIMPLE INVOICE, TAX INVOICE, PROFORMA INVOICE
+  date          DateTime
+  dueDate       DateTime
+  status        String        @default("UNPAID") // PAID, UNPAID, DRAFT, CANCELLED
+  client        Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId      String
+  items         InvoiceItem[]
+  subTotal      Float
+  cgst          Float         @default(0)
+  sgst          Float         @default(0)
+  igst          Float         @default(0)
+  tdsRate       Float         @default(0) // Percentage (e.g. 1% or 2% or 10%)
+  tdsAmount     Float         @default(0)
+  tdsSection    String?       // e.g. "194C", "194J"
+  tcsRate       Float         @default(0)
+  tcsAmount     Float         @default(0)
+  grandTotal    Float         @default(0)
+  netPayable    Float         @default(0)
+  totalAmount   Float         // subTotal + cgst + sgst + igst + tcsAmount - tdsAmount (Net Payable)
+  paymentTerms  String        @default("Due on Receipt")
+  bankName      String?
+  bankAccount   String?
+  ifscCode      String?
+  upiId         String?
+  authorizedSignatory String?
+  digitalSignature Boolean    @default(false)
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model InvoiceItem {
+  id          String   @id @default(uuid())
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId   String
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  description String
+  quantity    Float
+  price       Float
+  taxRate     Float    @default(0) // e.g. 18% (total GST rate)
+  amount      Float    // quantity * price
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  description String
+  amount      Float
+  category    String   // e.g. Rent, Salary, Software, Marketing, Utilities, Travel, Other
+  date        DateTime
+  notes       String?
+  receiptUrl  String?  // Rel URL path to the receipt file (PNG/JPG/PDF)
+  supplierId  String?
+  supplier    Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Employee {
+  id          String    @id @default(uuid())
+  name        String
+  email       String    @unique
+  designation String
+  department  String?
+  pan         String?
+  bankAccount String?
+  ifscCode    String?
+  baseSalary  Float     // Monthly base pay
+  allowances  Float     @default(0) // Standard monthly allowances
+  deductions  Float     @default(0) // Standard monthly deductions (e.g. PF/tax)
+  payslips    Payslip[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Payslip {
+  id              String   @id @default(uuid())
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId      String
+  month           Int      // 1 to 12
+  year            Int
+  paidDays        Float    // Days present
+  grossEarnings   Float
+  totalDeductions Float
+  netSalary       Float
+  status          String   @default("UNPAID") // PAID, UNPAID, DRAFT
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Product {
+  id             String             @id @default(uuid())
+  name           String
+  sku            String             @unique
+  barcode        String?            @unique
+  description    String?
+  category       String
+  unit           String             @default("PCS") // PCS, GRAMS, CARATS
+  purchasePrice  Float              @default(0)
+  sellingPrice   Float              @default(0)
+  taxRate        Float              @default(18)
+  alertThreshold Float              @default(5)
+  currentStock   Float              @default(0)
+  items          InvoiceItem[]
+  transactions   StockTransaction[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+}
+
+model StockTransaction {
+  id           String   @id @default(uuid())
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId    String
+  type         String   // "INWARD", "OUTWARD", "ADJUSTMENT"
+  quantity     Float
+  unitPrice    Float    @default(0)
+  supplierName String?
+  supplierId   String?
+  supplier     Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  reference    String?
+  notes        String?
+  date         DateTime @default(now())
+  createdAt    DateTime @default(now())
+}
+
+model Supplier {
+  id           String             @id @default(uuid())
+  companyName  String             @unique
+  contactName  String?
+  gstin        String?
+  pan          String?
+  email        String
+  phone        String?
+  address      String?
+  state        String             // e.g. "Delhi"
+  city         String?
+  zip          String?
+  transactions StockTransaction[]
+  expenses     Expense[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+}
+
+model Voucher {
+  id            String        @id @default(uuid())
+  voucherNumber String        @unique
+  type          String        // "RECEIPT", "PAYMENT", "CONTRA", "JOURNAL"
+  date          DateTime
+  narration     String
+  reference     String?       // Cheque no, Invoice no, transaction ref
+  items         VoucherItem[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model VoucherItem {
+  id          String   @id @default(uuid())
+  voucher     Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  voucherId   String
+  accountName String   // Account from Chart of Accounts
+  type        String   // "DEBIT" or "CREDIT"
+  amount      Float
+}

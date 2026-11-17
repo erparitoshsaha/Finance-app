@@ -1,0 +1,30 @@
+node_modules/
+.env
+dev.db
+dev.db-journal
+.next/
+dist/
+build/
+.DS_Store
+*.local
+
+# Environment variables
+.env*
+!.env.example
+!.env.template
+
+# Build and cache files
+*.tsbuildinfo
+coverage/
+.turbo/
+
+# Runtime uploads (never commit user-uploaded data)
+uploads/*
+!uploads/.gitkeep
+
+# Logs
+*.log
+npm-debug.log*
+
+# Local notification logs and customer data
+config/notifications.json
